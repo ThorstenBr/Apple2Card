@@ -26,14 +26,16 @@
 #include "ff.h"
 #endif
 
+#define INVALID_FILENUM 254
+
 request_t request;               // the slot/file/volume which is requested for access
 FATFS     current_fs;            // the FATFS which is currently mounted
 FIL       current_file;          // the FAT file which is currently mounted
-uint8_t   current_filenum = 255; // the file number which is currently accessed (FAT or RAW)
+uint8_t   current_filenum = INVALID_FILENUM; // the file number which is currently accessed (FAT or RAW)
 int8_t    slot_type[2]  = {SLOT_TYPE_UNKNOWN, SLOT_TYPE_UNKNOWN}; // the detected disk format (RAW/FAT/nothing)
 
 char vol_filename[] = "X:BLKDEVXX.PO"; // the currently mounted drive (and file)
-uint8_t vol_filename_length = 8; // we can switch the vol_filename template to "X:VOLxx.PO" and shorten the name
+uint8_t vol_filename_length = 11; // we can switch the vol_filename template to "X:VOLxx.PO" and shorten the name
 
 #define FILE_VALID(file) ((file)->obj.fs != NULL) // check if the FS object is valid
 
@@ -47,22 +49,22 @@ uint8_t hex_digit(uint8_t ch)
 // mount a FAT disk of given SD card
 bool vol_mount(void)
 {
-  char sdslot = request.sdslot+'0'; // map to alphanum character
-  if (vol_filename[0] != sdslot) // already mounted?
+  char sdslot = request.sdslot+'0';  // map to alphanum character
+  if (vol_filename[0] != sdslot)     // already mounted?
   {
-    if (vol_filename[0] != 'X') // anything else mounted?
+    if (vol_filename[0] != 'X')      // anything else mounted?
     {
       if (FILE_VALID(&current_file)) // any open file?
       {
         f_close(&current_file);
-        current_filenum = 255;
       }
-      f_unmount(vol_filename); // unmount the volume (ignores the filename)
+      f_unmount(vol_filename);       // unmount the volume (ignores the filename)
     }
+    current_filenum = INVALID_FILENUM;
     vol_filename[0] = sdslot;
     if (f_mount(&current_fs, vol_filename, 1) != FR_OK) // this only mounts the volume, ignores the filename
     {
-      vol_filename[0] = 'X'; // invalidate current drive
+      vol_filename[0] = 'X';         // invalidate current drive
       return false;
     }
   }
@@ -81,19 +83,20 @@ void vol_check_sdslot_type(void)
     {
       slot_type[request.sdslot] = SLOT_TYPE_FAT;  // FAT FS detected
 
-      // have we already decided to use the new, short file naming scheme?
-      if (vol_filename_length==8) // not yet?
+      // have we already decided whether to use the new/short or old/long file naming scheme?
+      if (vol_filename_length==11)  // not yet decided?
       {
         // check if "BLKDEV01.PO" exists
-        request.filenum = 1;
+        vol_filename_length = 8;    // try 8 characters for the base name (BLKDEVxx)
+        request.filenum = 1;        // check volume 1
         if (!vol_open_drive_file()) // no such file?
         {
-          // switch to other/new naming scheme
+          // switch to new/short naming scheme instead
           uint32_t* p = (uint32_t*) &vol_filename[2];
-          *(p++) = 0x584c4f56; // 'VOLX' in space-saving 32bit form
-          *(p++) = 0x4f502e58; // 'X.PO' in space-saving 32bit form
+          *(p++) = 0x584c4f56;      // 'VOLX' in space-saving 32bit form
+          *(p++) = 0x4f502e58;      // 'X.PO' in space-saving 32bit form
           *((uint8_t*) p) = 0;
-          vol_filename_length = 5; // shorten base filename to 5 characters "VOLxx"
+          vol_filename_length = 5;  // shorten base filename to 5 characters "VOLxx"
         }
       }
     }
@@ -151,9 +154,15 @@ bool vol_open_drive_file(void)
   if (current_filenum == request.filenum)
     return true;
 
+  if (FILE_VALID(&current_file)) // any open file?
+  {
+    f_close(&current_file);
+    current_filenum = INVALID_FILENUM;
+  }
+
   // open file
-  vol_filename[(vol_filename_length&0xf)  ] = hex_digit(request.filenum >> 4);
-  vol_filename[(vol_filename_length&0xf)+1] = hex_digit(request.filenum & 0x0F);
+  vol_filename[vol_filename_length  ] = hex_digit(request.filenum >> 4);
+  vol_filename[vol_filename_length+1] = hex_digit(request.filenum & 0x0F);
 
   if (f_open(&current_file, vol_filename, FA_READ | FA_WRITE) == FR_OK)
   {

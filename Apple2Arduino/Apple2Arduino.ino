@@ -63,7 +63,7 @@
   #error Selected BOOTPG is not implemented.
 #endif
 
-#define NUMBER_BOOTBLOCKS (sizeof(bootblocks)/(512*sizeof(uint8_t)))
+#define NUMBER_BOOTBLOCKS ((sizeof(bootblocks)+511)/(512*sizeof(uint8_t)))
 
 #ifdef DEBUG_SERIAL
 #ifdef SOFTWARE_SERIAL
@@ -330,16 +330,25 @@ uint8_t do_status(void)
 #if BOOTPG>1
 void read_bootblock(uint8_t* buf)
 {
+  // check if a custom boot program is available on any SD card (with FAT format)
+  if ((slot_type[0] == SLOT_TYPE_FAT)||(slot_type[1] == SLOT_TYPE_FAT))
+  {
+      request.sdslot  = (slot_type[0] == SLOT_TYPE_FAT) ? 0 : 1;
+      request.filenum = 0xff; // use file number 0xff (VOLFF.po)
+      if (vol_read_block(buf) == 0) // success?
+        return;
+  }
+
+  // otherwise return data of builtin boot program
   a2slot = (unit >> 4) & 0x7;
 
-  request.blk &= 0xff;
-  while (request.blk >= NUMBER_BOOTBLOCKS)
-    request.blk -= NUMBER_BOOTBLOCKS;
-
   uint32_t blkofs = request.blk << 9;
-  for (uint16_t i = 0; i < 512; i++)
+  for (uint32_t i = 0; i < 512; i++)
   {
-    buf[i] = pgm_read_byte(&bootblocks[blkofs + i]);
+    if (blkofs + i < sizeof(bootblocks))
+      buf[i] = pgm_read_byte(&bootblocks[blkofs + i]);
+    else
+      buf[i] = 0xff;
   }
 }
 #endif
@@ -701,9 +710,9 @@ void setup()
   setup_serial();
   read_eeprom();
 
-  request.sdslot = SDSLOT2;
-  vol_check_sdslot_type();
   request.sdslot = SDSLOT1;
+  vol_check_sdslot_type();
+  request.sdslot = SDSLOT2;
   vol_check_sdslot_type();
 
   no_cards_blink();

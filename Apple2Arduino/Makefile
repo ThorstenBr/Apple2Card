@@ -58,6 +58,9 @@ BOOTLOADER	:= optiboot_flash_atmega644p_UART_DANII_16000000L_NOLED.hex
 BUILD_PROPERTIES += --build-property "bootloader.file=$(BOOTLOADER)"
 endif
 
+# set localisation to default, so arduino-cli log output does not depend on system language, but is always in english
+export LC_ALL:=C
+
 .PHONY: all build
 
 all: build
@@ -77,7 +80,7 @@ $(HEX_FILE): $(SOURCES) fwversion.h bootloaders/$(BOOTLOADER) | $(DSTDIR)
 	$(Q)cp $(DSTDIR)/Apple2Arduino.ino.with_bootloader.hex $@
 
 clean:
-	$(Q)rm -f $(DSTDIR)/*.eep $(DSTDIR)/*.elf $(DSTDIR)/*.hex $(DSTDIR)/*.bin fwversion.h
+  $(Q)rm -f $(DSTDIR)/*.eep $(DSTDIR)/*.elf $(DSTDIR)/*.hex $(DSTDIR)/*.bin fwversion.h $(HEX_FILE)
 
 $(DSTDIR):
 	$(Q)mkdir -p $(DSTDIR)

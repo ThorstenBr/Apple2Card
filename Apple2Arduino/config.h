@@ -4,7 +4,6 @@
 #define USE_FTP          // enable FTP support
 #define USE_FAT_DISK     // enable FAT support
 #define USE_RAW_DISK     // enable raw disk support
-//#define USE_WIDEDEV      // wide device support
 
 #undef USE_MEM_CHECK     // enable this for memory overflow checks
 #undef DEBUG_SERIAL      // enable this for serial debug output
